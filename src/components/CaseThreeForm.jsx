@@ -28,7 +28,7 @@ export default function CaseThreeForm({ onBack, balance }) {
         return estimateCost(duration)
       })
       .then((data) => {
-        if (!cancelled && data) setCost(data?.cost_usd ?? data?.estimated_cost_usd ?? data)
+        if (!cancelled && data) setCost(data?.estimated_cost_usd ?? null)
       })
       .catch(() => {
         if (!cancelled) setCost(null)
