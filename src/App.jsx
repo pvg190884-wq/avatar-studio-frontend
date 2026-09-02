@@ -30,7 +30,7 @@ export default function App() {
   useEffect(() => {
     if (!session?.access_token) return
     getBalance(session.access_token)
-      .then((data) => setBalance(data?.balance_usd ?? data?.balance ?? null))
+      .then((data) => setBalance(data?.balance_usd ?? null))
       .catch(() => setBalance(null))
   }, [session, balanceTick])
 
