@@ -91,12 +91,12 @@ export async function getBalance(accessToken) {
   const res = await fetch(`${API_BASE}/api/billing/balance`, {
     headers: { authorization: `Bearer ${accessToken}` },
   })
-  return parseJsonOrThrow(res)
+  return parseJsonOrThrow(res) // { user_id, balance_usd }
 }
 
 export async function estimateCost(durationSeconds) {
   const res = await fetch(`${API_BASE}/api/billing/estimate?duration_seconds=${encodeURIComponent(durationSeconds)}`)
-  return parseJsonOrThrow(res)
+  return parseJsonOrThrow(res) // { duration_seconds, estimated_cost_usd }
 }
 
 export async function createDeposit(accessToken, amount, method) {
