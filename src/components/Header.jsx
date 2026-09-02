@@ -11,7 +11,7 @@ export default function Header({ session, onOpenTopUp, onOpenAbout }) {
     setLoadingBalance(true)
     try {
       const data = await getBalance(session.access_token)
-      setBalance(data?.balance_usd ?? data?.balance ?? null)
+      setBalance(data?.balance_usd ?? null)
     } catch (err) {
       console.error('Не удалось получить баланс:', err)
     } finally {
