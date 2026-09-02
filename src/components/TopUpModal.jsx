@@ -131,14 +131,15 @@ export default function TopUpModal({ session, onClose, onPaid }) {
 
         {tab === 'sbp' && sbpInfo && (
           <div className="pay-link-box">
-            <p style={{ fontSize: 13.5, color: 'var(--fg-muted)' }}>
-              Переведи сумму по СБП на номер ниже, затем пришли подтверждение в
-              {' '}<a href="https://t.me/Bestconsultingbot" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--turq)' }}>Telegram-бот</a>.
-              Баланс зачислится после ручной проверки.
+            <p style={{ fontSize: 13.5, color: 'var(--fg-muted)' }}>{sbpInfo.instructions}</p>
+            <div className="mono-box">{sbpInfo.sbp_phone}</div>
+            <p style={{ fontSize: 12, color: 'var(--fg-faint)' }}>
+              После перевода пришли номер операции в{' '}
+              <a href="https://t.me/Bestconsultingbot" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--turq)' }}>
+                Telegram-бот
+              </a>{' '}
+              — баланс зачислится после ручной проверки.
             </p>
-            <div className="mono-box">
-              {sbpInfo.phone || sbpInfo.sbp_phone || JSON.stringify(sbpInfo)}
-            </div>
           </div>
         )}
       </div>
