@@ -150,3 +150,136 @@ export function readAudioDuration(file) {
     audioEl.src = url
   })
 }
+
+// ---------- Сжатие изображений перед отправкой ----------
+//
+// Фото с телефона или скриншоты часто весят 5–8+ МБ — та же причина
+// обрывов "Failed to fetch", что и с несжатым аудио. SadTalker всё
+// равно приводит входное фото к рабочему разрешению (256–512px)
+// внутри своего пайплайна, так что уменьшение до 1600px по длинной
+// стороне не влияет на качество результата генерации, а только
+// убирает лишний вес файла.
+const MAX_IMAGE_DIMENSION = 1600
+const IMAGE_QUALITY = 0.9
+const SKIP_COMPRESSION_BELOW_BYTES = 1.5 * 1024 * 1024 // < 1.5 МБ не трогаем
+
+export async function compressImageFile(file) {
+  try {
+    if (!file.type.startsWith('image/')) return file
+
+    const bitmap = await createImageBitmap(file)
+    const { width, height } = bitmap
+    const alreadySmall = width <= MAX_IMAGE_DIMENSION && height <= MAX_IMAGE_DIMENSION
+    if (alreadySmall && file.size < SKIP_COMPRESSION_BELOW_BYTES) {
+      bitmap.close?.()
+      return file
+    }
+
+    const scale = Math.min(1, MAX_IMAGE_DIMENSION / Math.max(width, height))
+    const targetW = Math.max(1, Math.round(width * scale))
+    const targetH = Math.max(1, Math.round(height * scale))
+
+    const canvas = document.createElement('canvas')
+    canvas.width = targetW
+    canvas.height = targetH
+    const ctx = canvas.getContext('2d')
+    ctx.drawImage(bitmap, 0, 0, targetW, targetH)
+    bitmap.close?.()
+
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', IMAGE_QUALITY))
+    if (!blob || blob.size >= file.size) return file
+
+    const newName = file.name.replace(/\.[^.]+$/, '') + '.jpg'
+    return new File([blob], newName, { type: 'image/jpeg' })
+  } catch (err) {
+    console.warn('Не удалось сжать изображение, отправляем как есть:', err)
+    return file
+  }
+}
+
+// ---------- Сжатие аудио перед отправкой ----------
+//
+// Несжатые WAV-файлы (особенно длинные образцы голоса) могут весить
+// несколько мегабайт — такие запросы стабильно обрываются ошибкой
+// "Failed to fetch" при загрузке на Railway (см. диагностику в чате).
+// Решение — понизить частоту дискретизации до 16 кГц и свести в моно
+// прямо в браузере перед отправкой. Модели голосового клонирования
+// (XTTS и подобные) всё равно пересэмплируют вход к своей рабочей
+// частоте внутри себя, так что для результата генерации это не потеря
+// качества, а просто удаление избыточных данных.
+const COMPRESSED_SAMPLE_RATE = 16000
+
+function encodeWavPCM16(audioBuffer) {
+  const numChannels = 1 // всегда сводим в моно
+  const sampleRate = audioBuffer.sampleRate
+  const samples = audioBuffer.getChannelData(0)
+  const bytesPerSample = 2
+  const blockAlign = numChannels * bytesPerSample
+  const dataSize = samples.length * bytesPerSample
+
+  const buffer = new ArrayBuffer(44 + dataSize)
+  const view = new DataView(buffer)
+
+  function writeString(offset, str) {
+    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i))
+  }
+
+  writeString(0, 'RIFF')
+  view.setUint32(4, 36 + dataSize, true)
+  writeString(8, 'WAVE')
+  writeString(12, 'fmt ')
+  view.setUint32(16, 16, true) // PCM chunk size
+  view.setUint16(20, 1, true) // audio format = PCM
+  view.setUint16(22, numChannels, true)
+  view.setUint32(24, sampleRate, true)
+  view.setUint32(28, sampleRate * blockAlign, true) // byte rate
+  view.setUint16(32, blockAlign, true)
+  view.setUint16(34, 16, true) // bits per sample
+  writeString(36, 'data')
+  view.setUint32(40, dataSize, true)
+
+  let offset = 44
+  for (let i = 0; i < samples.length; i++, offset += 2) {
+    const s = Math.max(-1, Math.min(1, samples[i]))
+    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true)
+  }
+
+  return new Blob([buffer], { type: 'audio/wav' })
+}
+
+// Возвращает сжатый File (16 кГц, моно, 16-бит WAV). Если по любой
+// причине декодирование не удалось (нестандартный формат и т.п.) —
+// тихо возвращает исходный файл, чтобы не блокировать пользователя.
+export async function compressAudioFile(file) {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext
+    if (!AudioCtx) return file
+
+    const arrayBuffer = await file.arrayBuffer()
+    const audioCtx = new AudioCtx()
+    const decoded = await audioCtx.decodeAudioData(arrayBuffer)
+    audioCtx.close()
+
+    const targetRate = Math.min(COMPRESSED_SAMPLE_RATE, decoded.sampleRate)
+    const offlineCtx = new OfflineAudioContext(
+      1,
+      Math.ceil(decoded.duration * targetRate),
+      targetRate
+    )
+    const source = offlineCtx.createBufferSource()
+    source.buffer = decoded
+    source.connect(offlineCtx.destination)
+    source.start()
+    const rendered = await offlineCtx.startRendering()
+
+    const blob = encodeWavPCM16(rendered)
+    // Если сжатие вдруг не помогло (редкий случай) — не подсовываем файл больше исходного
+    if (blob.size >= file.size) return file
+
+    const newName = file.name.replace(/\.[^.]+$/, '') + '.wav'
+    return new File([blob], newName, { type: 'audio/wav' })
+  } catch (err) {
+    console.warn('Не удалось сжать аудио, отправляем как есть:', err)
+    return file
+  }
+}
