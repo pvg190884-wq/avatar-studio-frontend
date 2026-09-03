@@ -4,11 +4,11 @@ import JobRunner from './JobRunner'
 import { submitPhotoTextEmotion, estimateTextDurationSeconds, MAX_CLIP_SECONDS } from '../api'
 
 const EMOTIONS = [
-  { id: 'neutral', label: 'РќРµР№С‚СЂР°Р»СЊРЅРѕ' },
-  { id: 'happy', label: 'Р Р°РґРѕСЃС‚СЊ' },
-  { id: 'sad', label: 'Р“СЂСѓСЃС‚СЊ' },
-  { id: 'angry', label: 'Р—Р»РѕСЃС‚СЊ' },
-  { id: 'surprised', label: 'РЈРґРёРІР»РµРЅРёРµ' },
+  { id: 'neutral', label: 'Нейтрально' },
+  { id: 'happy', label: 'Радость' },
+  { id: 'sad', label: 'Грусть' },
+  { id: 'angry', label: 'Злость' },
+  { id: 'surprised', label: 'Удивление' },
 ]
 
 export default function CaseOneForm({ onBack }) {
@@ -36,7 +36,7 @@ export default function CaseOneForm({ onBack }) {
       const data = await submitPhotoTextEmotion({ image, voiceSample, text, emotion, language })
       setJobId(data.job_id)
     } catch (err) {
-      setError(err.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РїСЂР°РІРёС‚СЊ Р·Р°РґР°С‡Сѓ')
+      setError(err.message || 'Не удалось отправить задачу')
     } finally {
       setSubmitting(false)
     }
@@ -52,8 +52,8 @@ export default function CaseOneForm({ onBack }) {
 
   return (
     <div className="panel">
-      <div className="back-link" onClick={onBack}>в†ђ Р’С‹Р±СЂР°С‚СЊ РґСЂСѓРіРѕР№ СЃС†РµРЅР°СЂРёР№</div>
-      <h2 style={{ fontSize: 20, marginBottom: 18 }}>РљРµР№СЃ 1 В· Р¤РѕС‚Рѕ + С‚РµРєСЃС‚</h2>
+      <div className="back-link" onClick={onBack}>← Выбрать другой сценарий</div>
+      <h2 style={{ fontSize: 20, marginBottom: 18 }}>Кейс 1 · Фото + текст</h2>
 
       {error && <div className="error-box">{error}</div>}
 
@@ -63,8 +63,8 @@ export default function CaseOneForm({ onBack }) {
           accept="image/*"
           file={image}
           onChange={setImage}
-          label="Р¤РѕС‚Рѕ"
-          hint="JPG/PNG, Р»РёС†Рѕ Р°РЅС„Р°СЃ РєСЂСѓРїРЅС‹Рј РїР»Р°РЅРѕРј, С…РѕСЂРѕС€РµРµ РѕСЃРІРµС‰РµРЅРёРµ вЂ” Р»СЋР±РѕР№ СЂР°Р·РјРµСЂ, СЃРѕР¶РјС‘Рј Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё"
+          label="Фото"
+          hint="JPG/PNG, лицо анфас крупным планом, хорошее освещение — любой размер, сожмём автоматически"
           compressImage
         />
         <FileDrop
@@ -72,29 +72,29 @@ export default function CaseOneForm({ onBack }) {
           accept="audio/*"
           file={voiceSample}
           onChange={setVoiceSample}
-          label="РћР±СЂР°Р·РµС† РіРѕР»РѕСЃР°"
-          hint="WAV/MP3, 10вЂ“20 СЃРµРєСѓРЅРґ С‡РёСЃС‚РѕР№ СЂРµС‡Рё Р±РµР· РјСѓР·С‹РєРё Рё С€СѓРјР°"
+          label="Образец голоса"
+          hint="WAV/MP3, 10–20 секунд чистой речи без музыки и шума"
           compressAudio
         />
 
         <div className="field">
-          <label>РўРµРєСЃС‚ РґР»СЏ РѕР·РІСѓС‡РєРё</label>
+          <label>Текст для озвучки</label>
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder="Р§С‚Рѕ РґРѕР»Р¶РµРЅ СЃРєР°Р·Р°С‚СЊ Р°РІР°С‚Р°СЂвЂ¦"
+            placeholder="Что должен сказать аватар…"
             required
           />
           {text.trim().length > 0 && (
             <span className={`hint ${overLimit ? 'hint-warn' : ''}`} style={{ textTransform: 'none' }}>
-              РџСЂРёРјРµСЂРЅР°СЏ РґР»РёС‚РµР»СЊРЅРѕСЃС‚СЊ РѕР·РІСѓС‡РєРё: ~{estimatedSeconds.toFixed(1)} СЃРµРє
-              {overLimit && ` вЂ” РїСЂРµРІС‹С€Р°РµС‚ Р»РёРјРёС‚ РІ ${MAX_CLIP_SECONDS} СЃРµРє, СЃРѕРєСЂР°С‚Рё С‚РµРєСЃС‚`}
+              Примерная длительность озвучки: ~{estimatedSeconds.toFixed(1)} сек
+              {overLimit && ` — превышает лимит в ${MAX_CLIP_SECONDS} сек, сократи текст`}
             </span>
           )}
         </div>
 
         <div className="field">
-          <label>Р­РјРѕС†РёСЏ</label>
+          <label>Эмоция</label>
           <div className="emotion-grid">
             {EMOTIONS.map((em) => (
               <div
@@ -109,15 +109,15 @@ export default function CaseOneForm({ onBack }) {
         </div>
 
         <div className="field">
-          <label>РЇР·С‹Рє С‚РµРєСЃС‚Р°</label>
+          <label>Язык текста</label>
           <select value={language} onChange={(e) => setLanguage(e.target.value)}>
-            <option value="ru">Р СѓСЃСЃРєРёР№</option>
+            <option value="ru">Русский</option>
             <option value="en">English</option>
           </select>
         </div>
 
         <button className="btn btn-primary btn-block" type="submit" disabled={!canSubmitFinal}>
-          {submitting ? 'РћС‚РїСЂР°РІР»СЏРµРјвЂ¦' : 'РЎРіРµРЅРµСЂРёСЂРѕРІР°С‚СЊ РІРёРґРµРѕ'}
+          {submitting ? 'Отправляем…' : 'Сгенерировать видео'}
         </button>
       </form>
     </div>
