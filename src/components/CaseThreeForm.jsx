@@ -53,7 +53,7 @@ export default function CaseThreeForm({ onBack, balance }) {
       const data = await submitLipsync({ video, audio })
       setJobId(data.job_id)
     } catch (err) {
-      setError(err.message || 'Не удалось отправить задачу')
+      setError(err.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РїСЂР°РІРёС‚СЊ Р·Р°РґР°С‡Сѓ')
     } finally {
       setSubmitting(false)
     }
@@ -69,8 +69,8 @@ export default function CaseThreeForm({ onBack, balance }) {
 
   return (
     <div className="panel">
-      <div className="back-link" onClick={onBack}>← Выбрать другой сценарий</div>
-      <h2 style={{ fontSize: 20, marginBottom: 18 }}>Кейс 3 · Липсинк по видео</h2>
+      <div className="back-link" onClick={onBack}>в†ђ Р’С‹Р±СЂР°С‚СЊ РґСЂСѓРіРѕР№ СЃС†РµРЅР°СЂРёР№</div>
+      <h2 style={{ fontSize: 20, marginBottom: 18 }}>РљРµР№СЃ 3 В· Р›РёРїСЃРёРЅРє РїРѕ РІРёРґРµРѕ</h2>
 
       {error && <div className="error-box">{error}</div>}
 
@@ -80,33 +80,34 @@ export default function CaseThreeForm({ onBack, balance }) {
           accept="video/*"
           file={video}
           onChange={setVideo}
-          label="Исходное видео"
-          hint="MP4, лицо видно на протяжении всей записи"
+          label="Р�СЃС…РѕРґРЅРѕРµ РІРёРґРµРѕ"
+          hint="MP4, Р»РёС†Рѕ РІРёРґРЅРѕ РЅР° РїСЂРѕС‚СЏР¶РµРЅРёРё РІСЃРµР№ Р·Р°РїРёСЃРё, РґРѕ ~20 РњР‘ (СЃР¶Р°С‚РёРµ РІРёРґРµРѕ РїРѕРєР° РЅРµ Р°РІС‚РѕРјР°С‚РёР·РёСЂРѕРІР°РЅРѕ)"
         />
         <FileDrop
           id="c3-audio"
           accept="audio/*"
           file={audio}
           onChange={setAudio}
-          label="Аудио-драйвер"
-          hint={`WAV/MP3, до ${MAX_CLIP_SECONDS} секунд — новая речь, под которую подстроятся губы`}
+          label="РђСѓРґРёРѕ-РґСЂР°Р№РІРµСЂ"
+          hint={`WAV/MP3, РґРѕ ${MAX_CLIP_SECONDS} СЃРµРєСѓРЅРґ вЂ” РЅРѕРІР°СЏ СЂРµС‡СЊ, РїРѕРґ РєРѕС‚РѕСЂСѓСЋ РїРѕРґСЃС‚СЂРѕСЏС‚СЃСЏ РіСѓР±С‹`}
+          compressAudio
         />
 
         {audioSeconds !== null && (
           <div className={`cost-banner ${insufficient || overLimit ? 'insufficient' : ''}`}>
             <span>
               {overLimit
-                ? `Аудио длится ${audioSeconds.toFixed(1)} сек — превышает лимит в ${MAX_CLIP_SECONDS} сек, выбери файл короче`
-                : costLoading ? 'Считаем стоимость…' : numericCost !== null
-                  ? <>Оценка стоимости: <b>${numericCost.toFixed(2)}</b></>
-                  : 'Не удалось оценить стоимость — генерация всё равно доступна'}
+                ? `РђСѓРґРёРѕ РґР»РёС‚СЃСЏ ${audioSeconds.toFixed(1)} СЃРµРє вЂ” РїСЂРµРІС‹С€Р°РµС‚ Р»РёРјРёС‚ РІ ${MAX_CLIP_SECONDS} СЃРµРє, РІС‹Р±РµСЂРё С„Р°Р№Р» РєРѕСЂРѕС‡Рµ`
+                : costLoading ? 'РЎС‡РёС‚Р°РµРј СЃС‚РѕРёРјРѕСЃС‚СЊвЂ¦' : numericCost !== null
+                  ? <>РћС†РµРЅРєР° СЃС‚РѕРёРјРѕСЃС‚Рё: <b>${numericCost.toFixed(2)}</b></>
+                  : 'РќРµ СѓРґР°Р»РѕСЃСЊ РѕС†РµРЅРёС‚СЊ СЃС‚РѕРёРјРѕСЃС‚СЊ вЂ” РіРµРЅРµСЂР°С†РёСЏ РІСЃС‘ СЂР°РІРЅРѕ РґРѕСЃС‚СѓРїРЅР°'}
             </span>
-            {!overLimit && insufficient && <span className="warn">Недостаточно средств на балансе</span>}
+            {!overLimit && insufficient && <span className="warn">РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ СЃСЂРµРґСЃС‚РІ РЅР° Р±Р°Р»Р°РЅСЃРµ</span>}
           </div>
         )}
 
         <button className="btn btn-primary btn-block" type="submit" disabled={!canSubmit}>
-          {submitting ? 'Отправляем…' : 'Сгенерировать видео'}
+          {submitting ? 'РћС‚РїСЂР°РІР»СЏРµРјвЂ¦' : 'РЎРіРµРЅРµСЂРёСЂРѕРІР°С‚СЊ РІРёРґРµРѕ'}
         </button>
       </form>
     </div>
