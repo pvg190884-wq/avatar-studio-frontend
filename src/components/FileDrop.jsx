@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { compressAudioFile, compressImageFile } from '../api'
+import { compressAudioFile, compressImageFile, compressVideoFile } from '../api'
 
-export default function FileDrop({ id, accept, file, onChange, label, hint, placeholder, compressAudio, compressImage }) {
+export default function FileDrop({ id, accept, file, onChange, label, hint, placeholder, compressAudio, compressImage, compressVideo }) {
   const [processing, setProcessing] = useState(false)
 
   async function handleFileSelected(selected) {
@@ -20,6 +20,13 @@ export default function FileDrop({ id, accept, file, onChange, label, hint, plac
       setProcessing(true)
       try {
         onChange(await compressImageFile(selected))
+      } finally {
+        setProcessing(false)
+      }
+    } else if (compressVideo && selected.type.startsWith('video/')) {
+      setProcessing(true)
+      try {
+        onChange(await compressVideoFile(selected))
       } finally {
         setProcessing(false)
       }
