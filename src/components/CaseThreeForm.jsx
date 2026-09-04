@@ -81,7 +81,8 @@ export default function CaseThreeForm({ onBack, balance }) {
           file={video}
           onChange={setVideo}
           label="Исходное видео"
-          hint="MP4, лицо видно на протяжении всей записи, до ~20 МБ (сжатие видео пока не автоматизировано)"
+          hint="MP4/MOV, лицо видно на протяжении всей записи — любой размер, сожмём автоматически"
+          compressVideo
         />
         <FileDrop
           id="c3-audio"
