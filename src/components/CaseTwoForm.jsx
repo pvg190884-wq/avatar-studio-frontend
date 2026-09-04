@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import FileDrop from './FileDrop'
 import JobRunner from './JobRunner'
-import { submitPhotoEmotion, estimateCost, readAudioDuration, MAX_CLIP_SECONDS } from '../api'
+import { submitPhotoEmotion, estimateCost, readAudioDuration, MAX_CLIP_SECONDS, formatUsd } from '../api'
 
 // Пресеты Basic/Pro — API кейса 2 сам не различает тарифы, поэтому
 // тариф здесь маппится на доступные параметры модели (expression_scale,
@@ -132,7 +132,7 @@ export default function CaseTwoForm({ onBack, balance }) {
               {overLimit
                 ? `Аудио длится ${audioSeconds.toFixed(1)} сек — превышает лимит в ${MAX_CLIP_SECONDS} сек, выбери файл короче`
                 : costLoading ? 'Считаем стоимость…' : numericCost !== null
-                  ? <>Оценка стоимости: <b>${numericCost.toFixed(2)}</b></>
+                  ? <>Оценка стоимости: <b>{formatUsd(numericCost)}</b></>
                   : 'Не удалось оценить стоимость — генерация всё равно доступна'}
             </span>
             {!overLimit && insufficient && <span className="warn">Недостаточно средств на балансе</span>}
