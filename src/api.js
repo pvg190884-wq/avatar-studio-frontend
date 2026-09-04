@@ -283,3 +283,103 @@ export async function compressAudioFile(file) {
     return file
   }
 }
+
+// ---------- Сжатие видео перед отправкой (Кейс 3) ----------
+//
+// Видео с телефона легко весит 20-100+ МБ — та же причина "Failed to
+// fetch", что чинили для фото и аудио. MuseTalk использует только
+// кадры видео (аудио-дорожка исходника не нужна — озвучка идёт
+// отдельным файлом аудио-драйвера), поэтому пересобираем видео через
+// canvas в приемлемое разрешение и полностью убираем звук исходника.
+// Результат — WebM (VP9/VP8), это единственный формат, который умеет
+// закодировать сам браузер через MediaRecorder без сторонних библиотек;
+// ffmpeg на стороне MuseTalk-воркера читает WebM так же, как MP4.
+const MAX_VIDEO_DIMENSION = 854 // ~480p по длинной стороне
+const VIDEO_TARGET_FPS = 24
+const VIDEO_BITRATE = 1_500_000 // ~1.5 Мбит/с
+const SKIP_VIDEO_COMPRESSION_BELOW_BYTES = 8 * 1024 * 1024 // < 8 МБ не трогаем
+
+function pickVideoMimeType() {
+  const candidates = [
+    'video/webm;codecs=vp9',
+    'video/webm;codecs=vp8',
+    'video/webm',
+  ]
+  for (const type of candidates) {
+    if (window.MediaRecorder?.isTypeSupported?.(type)) return type
+  }
+  return null
+}
+
+export async function compressVideoFile(file) {
+  try {
+    if (!file.type.startsWith('video/')) return file
+    if (file.size < SKIP_VIDEO_COMPRESSION_BELOW_BYTES) return file
+
+    const mimeType = pickVideoMimeType()
+    if (!mimeType || !window.MediaRecorder) return file // браузер не поддерживает — отправляем как есть
+
+    const videoEl = document.createElement('video')
+    videoEl.muted = true
+    videoEl.playsInline = true
+    videoEl.src = URL.createObjectURL(file)
+
+    await new Promise((resolve, reject) => {
+      videoEl.onloadedmetadata = resolve
+      videoEl.onerror = () => reject(new Error('Не удалось прочитать видео'))
+    })
+
+    const { videoWidth, videoHeight } = videoEl
+    const scale = Math.min(1, MAX_VIDEO_DIMENSION / Math.max(videoWidth, videoHeight))
+    const targetW = Math.max(2, Math.round((videoWidth * scale) / 2) * 2) // чётные размеры для кодека
+    const targetH = Math.max(2, Math.round((videoHeight * scale) / 2) * 2)
+
+    // Если видео и так небольшого разрешения — пересжатие не даст выигрыша
+    if (scale >= 1 && file.size < SKIP_VIDEO_COMPRESSION_BELOW_BYTES * 2) {
+      URL.revokeObjectURL(videoEl.src)
+      return file
+    }
+
+    const canvas = document.createElement('canvas')
+    canvas.width = targetW
+    canvas.height = targetH
+    const ctx = canvas.getContext('2d')
+
+    const stream = canvas.captureStream(VIDEO_TARGET_FPS)
+    const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: VIDEO_BITRATE })
+    const chunks = []
+    recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data) }
+
+    const recordingDone = new Promise((resolve) => { recorder.onstop = resolve })
+
+    let drawing = true
+    function drawFrame() {
+      if (!drawing) return
+      ctx.drawImage(videoEl, 0, 0, targetW, targetH)
+      requestAnimationFrame(drawFrame)
+    }
+
+    recorder.start()
+    videoEl.currentTime = 0
+    await videoEl.play()
+    drawFrame()
+
+    await new Promise((resolve) => {
+      videoEl.onended = resolve
+    })
+    drawing = false
+    recorder.stop()
+    await recordingDone
+
+    URL.revokeObjectURL(videoEl.src)
+
+    const blob = new Blob(chunks, { type: mimeType })
+    if (blob.size >= file.size) return file // не помогло — используем исходник
+
+    const newName = file.name.replace(/\.[^.]+$/, '') + '.webm'
+    return new File([blob], newName, { type: mimeType })
+  } catch (err) {
+    console.warn('Не удалось сжать видео, отправляем как есть:', err)
+    return file
+  }
+}
