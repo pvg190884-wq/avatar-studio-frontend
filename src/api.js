@@ -16,13 +16,21 @@ async function parseJsonOrThrow(res) {
 
 // Грубая оценка длительности озвучки текста (TTS) в секундах —
 // нужна ДО генерации, чтобы предупредить о лимите в 15 секунд, пока
-// бэкенд не выполнил реальный синтез. Оценка по средней скорости речи
-// (~2.3 слова/сек для русского и английского с учётом естественных пауз).
+// бэкенд не выполнил реальный синтез. ВАЖНО: это очень приблизительная
+// оценка — реальная скорость XTTS сильно зависит от пунктуации (паузы
+// на запятых/точках) и выбранной эмоции, и на практике может быть
+// заметно медленнее наивного подсчёта слов в секунду. Оценка намеренно
+// консервативна (занижена), чтобы реже давать ложное "уложится",
+// когда по факту получится длиннее.
 export function estimateTextDurationSeconds(text) {
-  const words = (text || '').trim().split(/\s+/).filter(Boolean).length
+  const trimmed = (text || '').trim()
+  const words = trimmed.split(/\s+/).filter(Boolean).length
   if (words === 0) return 0
-  const WORDS_PER_SECOND = 2.3
-  return words / WORDS_PER_SECOND
+  const WORDS_PER_SECOND = 1.4
+  // Каждый знак препинания добавляет условную паузу
+  const punctuationCount = (trimmed.match(/[.,!?;:…]/g) || []).length
+  const PAUSE_PER_PUNCTUATION = 0.15
+  return words / WORDS_PER_SECOND + punctuationCount * PAUSE_PER_PUNCTUATION
 }
 
 export const MAX_CLIP_SECONDS = 15
@@ -39,8 +47,10 @@ export function formatUsd(amount) {
 }
 
 // ---------- Генерация (Кейсы 1, 2, 3) ----------
+// ВАЖНО: генерация теперь требует авторизации (списывает баланс на
+// бэкенде) — accessToken обязателен для всех трёх функций ниже.
 
-export async function submitPhotoTextEmotion({ image, voiceSample, text, emotion, language }) {
+export async function submitPhotoTextEmotion({ image, voiceSample, text, emotion, language, accessToken }) {
   const form = new FormData()
   form.append('image', image)
   form.append('voice_sample', voiceSample)
@@ -50,12 +60,13 @@ export async function submitPhotoTextEmotion({ image, voiceSample, text, emotion
 
   const res = await fetch(`${API_BASE}/api/generate/photo-text-emotion`, {
     method: 'POST',
+    headers: { authorization: `Bearer ${accessToken}` },
     body: form,
   })
   return parseJsonOrThrow(res)
 }
 
-export async function submitPhotoEmotion({ image, audio, expressionScale, poseStyle }) {
+export async function submitPhotoEmotion({ image, audio, expressionScale, poseStyle, accessToken }) {
   const form = new FormData()
   form.append('image', image)
   form.append('audio', audio)
@@ -64,18 +75,20 @@ export async function submitPhotoEmotion({ image, audio, expressionScale, poseSt
 
   const res = await fetch(`${API_BASE}/api/generate/photo-emotion`, {
     method: 'POST',
+    headers: { authorization: `Bearer ${accessToken}` },
     body: form,
   })
   return parseJsonOrThrow(res)
 }
 
-export async function submitLipsync({ video, audio }) {
+export async function submitLipsync({ video, audio, accessToken }) {
   const form = new FormData()
   form.append('video', video)
   form.append('audio', audio)
 
   const res = await fetch(`${API_BASE}/api/generate/lipsync`, {
     method: 'POST',
+    headers: { authorization: `Bearer ${accessToken}` },
     body: form,
   })
   return parseJsonOrThrow(res)
