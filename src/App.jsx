@@ -51,9 +51,9 @@ export default function App() {
       <Header session={session} onOpenTopUp={() => setTopUpOpen(true)} onOpenAbout={() => setAboutOpen(true)} />
 
       {activeCase === null && <CaseSelect onSelect={setActiveCase} />}
-      {activeCase === 1 && <CaseOneForm onBack={() => setActiveCase(null)} />}
-      {activeCase === 2 && <CaseTwoForm onBack={() => setActiveCase(null)} balance={balance} />}
-      {activeCase === 3 && <CaseThreeForm onBack={() => setActiveCase(null)} balance={balance} />}
+      {activeCase === 1 && <CaseOneForm onBack={() => setActiveCase(null)} session={session} onGenerated={() => setBalanceTick((t) => t + 1)} />}
+      {activeCase === 2 && <CaseTwoForm onBack={() => setActiveCase(null)} balance={balance} session={session} onGenerated={() => setBalanceTick((t) => t + 1)} />}
+      {activeCase === 3 && <CaseThreeForm onBack={() => setActiveCase(null)} balance={balance} session={session} onGenerated={() => setBalanceTick((t) => t + 1)} />}
 
       {topUpOpen && (
         <TopUpModal
