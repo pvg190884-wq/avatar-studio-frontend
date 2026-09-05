@@ -12,7 +12,7 @@ const TIERS = {
   pro: { label: 'Pro', desc: 'Более выразительная анимация', expressionScale: 1.0, poseStyle: 15 },
 }
 
-export default function CaseTwoForm({ onBack, balance }) {
+export default function CaseTwoForm({ onBack, balance, session, onGenerated }) {
   const [image, setImage] = useState(null)
   const [audio, setAudio] = useState(null)
   const [tier, setTier] = useState('basic')
@@ -66,6 +66,7 @@ export default function CaseTwoForm({ onBack, balance }) {
         audio,
         expressionScale: preset.expressionScale,
         poseStyle: preset.poseStyle,
+        accessToken: session.access_token,
       })
       setJobId(data.job_id)
     } catch (err) {
@@ -78,7 +79,7 @@ export default function CaseTwoForm({ onBack, balance }) {
   if (jobId) {
     return (
       <div className="panel">
-        <JobRunner jobId={jobId} onReset={() => setJobId(null)} />
+        <JobRunner jobId={jobId} onReset={() => setJobId(null)} onComplete={onGenerated} />
       </div>
     )
   }
