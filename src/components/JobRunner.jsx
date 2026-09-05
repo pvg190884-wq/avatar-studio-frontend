@@ -7,7 +7,7 @@ const STATUS_LABELS = {
   COMPLETED: 'Готово!',
 }
 
-export default function JobRunner({ jobId, onReset }) {
+export default function JobRunner({ jobId, onReset, onComplete }) {
   const [status, setStatus] = useState('IN_QUEUE')
   const [videoUrl, setVideoUrl] = useState(null)
   const [error, setError] = useState(null)
@@ -25,6 +25,7 @@ export default function JobRunner({ jobId, onReset }) {
         if (data.status === 'COMPLETED' && data.videoUrl) {
           setStatus('COMPLETED')
           setVideoUrl(data.videoUrl)
+          onComplete?.()
           return // остановить опрос
         }
         setStatus(data.status || 'IN_PROGRESS')
