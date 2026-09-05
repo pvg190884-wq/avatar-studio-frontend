@@ -3,7 +3,7 @@ import FileDrop from './FileDrop'
 import JobRunner from './JobRunner'
 import { submitLipsync, estimateCost, readAudioDuration, MAX_CLIP_SECONDS, formatUsd } from '../api'
 
-export default function CaseThreeForm({ onBack, balance }) {
+export default function CaseThreeForm({ onBack, balance, session, onGenerated }) {
   const [video, setVideo] = useState(null)
   const [audio, setAudio] = useState(null)
   const [submitting, setSubmitting] = useState(false)
@@ -50,7 +50,7 @@ export default function CaseThreeForm({ onBack, balance }) {
     setSubmitting(true)
     setError(null)
     try {
-      const data = await submitLipsync({ video, audio })
+      const data = await submitLipsync({ video, audio, accessToken: session.access_token })
       setJobId(data.job_id)
     } catch (err) {
       setError(err.message || 'Не удалось отправить задачу')
@@ -62,7 +62,7 @@ export default function CaseThreeForm({ onBack, balance }) {
   if (jobId) {
     return (
       <div className="panel">
-        <JobRunner jobId={jobId} onReset={() => setJobId(null)} />
+        <JobRunner jobId={jobId} onReset={() => setJobId(null)} onComplete={onGenerated} />
       </div>
     )
   }
