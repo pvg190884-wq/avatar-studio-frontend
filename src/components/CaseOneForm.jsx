@@ -11,7 +11,7 @@ const EMOTIONS = [
   { id: 'surprised', label: 'Удивление' },
 ]
 
-export default function CaseOneForm({ onBack }) {
+export default function CaseOneForm({ onBack, session, onGenerated }) {
   const [image, setImage] = useState(null)
   const [voiceSample, setVoiceSample] = useState(null)
   const [text, setText] = useState('')
@@ -33,7 +33,7 @@ export default function CaseOneForm({ onBack }) {
     setSubmitting(true)
     setError(null)
     try {
-      const data = await submitPhotoTextEmotion({ image, voiceSample, text, emotion, language })
+      const data = await submitPhotoTextEmotion({ image, voiceSample, text, emotion, language, accessToken: session.access_token })
       setJobId(data.job_id)
     } catch (err) {
       setError(err.message || 'Не удалось отправить задачу')
@@ -45,7 +45,7 @@ export default function CaseOneForm({ onBack }) {
   if (jobId) {
     return (
       <div className="panel">
-        <JobRunner jobId={jobId} onReset={() => setJobId(null)} />
+        <JobRunner jobId={jobId} onReset={() => setJobId(null)} onComplete={onGenerated} />
       </div>
     )
   }
@@ -87,7 +87,7 @@ export default function CaseOneForm({ onBack }) {
           />
           {text.trim().length > 0 && (
             <span className={`hint ${overLimit ? 'hint-warn' : ''}`} style={{ textTransform: 'none' }}>
-              Примерная длительность озвучки: ~{estimatedSeconds.toFixed(1)} сек
+              Примерная длительность озвучки: ~{estimatedSeconds.toFixed(1)} сек (грубая оценка, реальная может отличаться)
               {overLimit && ` — превышает лимит в ${MAX_CLIP_SECONDS} сек, сократи текст`}
             </span>
           )}
