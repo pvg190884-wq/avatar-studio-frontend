@@ -94,6 +94,21 @@ export async function submitLipsync({ video, audio, accessToken }) {
   return parseJsonOrThrow(res)
 }
 
+export async function submitLipsyncFromText({ video, voiceSample, text, language, accessToken }) {
+  const form = new FormData()
+  form.append('video', video)
+  form.append('voice_sample', voiceSample)
+  form.append('text', text)
+  form.append('language', language)
+
+  const res = await fetch(`${API_BASE}/api/generate/lipsync-from-text`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${accessToken}` },
+    body: form,
+  })
+  return parseJsonOrThrow(res)
+}
+
 // Опрос статуса. Бэкенд при готовности отдаёт бинарный video/mp4,
 // а не JSON — поэтому смотрим на content-type перед парсингом.
 export async function pollJobStatus(jobId) {
