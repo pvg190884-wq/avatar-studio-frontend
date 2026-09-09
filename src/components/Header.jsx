@@ -1,28 +1,6 @@
-import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../supabaseClient'
-import { getBalance } from '../api'
 
-export default function Header({ session, onOpenTopUp, onOpenAbout }) {
-  const [balance, setBalance] = useState(null)
-  const [loadingBalance, setLoadingBalance] = useState(false)
-
-  const refreshBalance = useCallback(async () => {
-    if (!session?.access_token) return
-    setLoadingBalance(true)
-    try {
-      const data = await getBalance(session.access_token)
-      setBalance(data?.balance_usd ?? null)
-    } catch (err) {
-      console.error('Не удалось получить баланс:', err)
-    } finally {
-      setLoadingBalance(false)
-    }
-  }, [session])
-
-  useEffect(() => {
-    refreshBalance()
-  }, [refreshBalance])
-
+export default function Header({ balance, loadingBalance, onRefreshBalance, onOpenTopUp, onOpenAbout }) {
   async function handleLogout() {
     await supabase.auth.signOut()
   }
@@ -39,7 +17,7 @@ export default function Header({ session, onOpenTopUp, onOpenAbout }) {
           {balance === null ? '—' : `$${Number(balance).toFixed(2)}`}
           <span
             className={`refresh ${loadingBalance ? 'spinning' : ''}`}
-            onClick={refreshBalance}
+            onClick={onRefreshBalance}
             title="Обновить баланс"
           >
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
