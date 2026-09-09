@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { supabase } from './supabaseClient'
 import { getBalance } from './api'
 import AuthScreen from './components/AuthScreen'
@@ -17,7 +17,7 @@ export default function App() {
   const [topUpOpen, setTopUpOpen] = useState(false)
   const [aboutOpen, setAboutOpen] = useState(false)
   const [balance, setBalance] = useState(null)
-  const [balanceTick, setBalanceTick] = useState(0)
+  const [loadingBalance, setLoadingBalance] = useState(false)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session))
@@ -27,12 +27,30 @@ export default function App() {
     return () => listener.subscription.unsubscribe()
   }, [])
 
+  // ЕДИНСТВЕННОЕ место во всём приложении, которое запрашивает баланс —
+  // раньше это дублировалось ещё и внутри Header.jsx, и нестабильная
+  // ссылка на объект session вызывала бесконечный повторный запрос
+  // /api/billing/balance, забивая собой лимит одновременных соединений
+  // браузера к бэкенду и вызывая "зависание" тяжёлых запросов генерации
+  // в очереди (видно как "Connection Start: Stalled" в DevTools).
+  const refreshBalance = useCallback(async (token) => {
+    if (!token) return
+    setLoadingBalance(true)
+    try {
+      const data = await getBalance(token)
+      setBalance(data?.balance_usd ?? null)
+    } catch (err) {
+      console.error('Не удалось получить баланс:', err)
+    } finally {
+      setLoadingBalance(false)
+    }
+  }, [])
+
+  const accessToken = session?.access_token
   useEffect(() => {
-    if (!session?.access_token) return
-    getBalance(session.access_token)
-      .then((data) => setBalance(data?.balance_usd ?? null))
-      .catch(() => setBalance(null))
-  }, [session, balanceTick])
+    if (!accessToken) return
+    refreshBalance(accessToken)
+  }, [accessToken, refreshBalance])
 
   if (session === undefined) {
     return <div className="app-shell" />
@@ -48,19 +66,25 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <Header session={session} onOpenTopUp={() => setTopUpOpen(true)} onOpenAbout={() => setAboutOpen(true)} />
+      <Header
+        balance={balance}
+        loadingBalance={loadingBalance}
+        onRefreshBalance={() => refreshBalance(accessToken)}
+        onOpenTopUp={() => setTopUpOpen(true)}
+        onOpenAbout={() => setAboutOpen(true)}
+      />
 
       {activeCase === null && <CaseSelect onSelect={setActiveCase} />}
-      {activeCase === 1 && <CaseOneForm onBack={() => setActiveCase(null)} session={session} onGenerated={() => setBalanceTick((t) => t + 1)} />}
-      {activeCase === 2 && <CaseTwoForm onBack={() => setActiveCase(null)} balance={balance} session={session} onGenerated={() => setBalanceTick((t) => t + 1)} />}
-      {activeCase === 3 && <CaseThreeForm onBack={() => setActiveCase(null)} balance={balance} session={session} onGenerated={() => setBalanceTick((t) => t + 1)} />}
+      {activeCase === 1 && <CaseOneForm onBack={() => setActiveCase(null)} session={session} onGenerated={() => refreshBalance(accessToken)} />}
+      {activeCase === 2 && <CaseTwoForm onBack={() => setActiveCase(null)} balance={balance} session={session} onGenerated={() => refreshBalance(accessToken)} />}
+      {activeCase === 3 && <CaseThreeForm onBack={() => setActiveCase(null)} balance={balance} session={session} onGenerated={() => refreshBalance(accessToken)} />}
 
       {topUpOpen && (
         <TopUpModal
           session={session}
           onClose={() => setTopUpOpen(false)}
           onPaid={() => {
-            setBalanceTick((t) => t + 1)
+            refreshBalance(accessToken)
             setTopUpOpen(false)
           }}
         />
