@@ -1,3 +1,5 @@
+import { supabaseUrl, supabaseAnonKey } from './supabaseClient'
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://avatar-studio-backend-production.up.railway.app'
 
 async function parseJsonOrThrow(res) {
@@ -46,9 +48,54 @@ export function formatUsd(amount) {
   return `$${amount.toFixed(2)}`
 }
 
+// ---------- Прямая загрузка видео в Supabase Storage (Кейс 3) ----------
+//
+// Видео Кейса 3 больше НЕ идёт через Railway: сначала бэкенд выдаёт
+// одноразовую подписанную ссылку на загрузку (см. /api/generate/upload-url),
+// затем браузер грузит файл НАПРЯМУЮ в Supabase Storage. Это убирает
+// "Failed to fetch" на крупных видео — файл больше не проходит через
+// edge-прокси Railway и не зависит от того, режет ли его по пути
+// корпоративный файрвол или узкий канал.
+
+async function requestVideoUploadUrl(accessToken, filename) {
+  const form = new FormData()
+  form.append('filename', filename)
+
+  const res = await fetch(`${API_BASE}/api/generate/upload-url`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${accessToken}` },
+    body: form,
+  })
+  return parseJsonOrThrow(res) // { bucket, path, upload_url }
+}
+
+async function uploadVideoDirectToStorage(file, uploadUrl) {
+  const form = new FormData()
+  form.append('cacheControl', '3600')
+  form.append('', file)
+
+  const res = await fetch(uploadUrl, {
+    method: 'PUT',
+    headers: {
+      apikey: supabaseAnonKey,
+      'x-upsert': 'false',
+    },
+    body: form,
+  })
+  if (!res.ok) {
+    let detail = `Ошибка ${res.status}`
+    try {
+      detail = JSON.stringify(await res.json())
+    } catch (e) {
+      // тело не JSON
+    }
+    throw new Error(`Не удалось загрузить видео: ${detail}`)
+  }
+}
+
 // ---------- Генерация (Кейсы 1, 2, 3) ----------
 // ВАЖНО: генерация теперь требует авторизации (списывает баланс на
-// бэкенде) — accessToken обязателен для всех трёх функций ниже.
+// бэкенде) — accessToken обязателен для всех функций ниже.
 
 export async function submitPhotoTextEmotion({ image, voiceSample, text, emotion, language, accessToken }) {
   const form = new FormData()
@@ -82,8 +129,12 @@ export async function submitPhotoEmotion({ image, audio, expressionScale, poseSt
 }
 
 export async function submitLipsync({ video, audio, accessToken }) {
+  const { bucket, path, upload_url } = await requestVideoUploadUrl(accessToken, video.name)
+  await uploadVideoDirectToStorage(video, upload_url)
+
   const form = new FormData()
-  form.append('video', video)
+  form.append('video_storage_bucket', bucket)
+  form.append('video_storage_path', path)
   form.append('audio', audio)
 
   const res = await fetch(`${API_BASE}/api/generate/lipsync`, {
@@ -95,8 +146,12 @@ export async function submitLipsync({ video, audio, accessToken }) {
 }
 
 export async function submitLipsyncFromText({ video, voiceSample, text, language, accessToken }) {
+  const { bucket, path, upload_url } = await requestVideoUploadUrl(accessToken, video.name)
+  await uploadVideoDirectToStorage(video, upload_url)
+
   const form = new FormData()
-  form.append('video', video)
+  form.append('video_storage_bucket', bucket)
+  form.append('video_storage_path', path)
   form.append('voice_sample', voiceSample)
   form.append('text', text)
   form.append('language', language)
@@ -239,13 +294,13 @@ export async function compressImageFile(file) {
 // ---------- Сжатие аудио перед отправкой ----------
 //
 // Несжатые WAV-файлы (особенно длинные образцы голоса) могут весить
-// несколько мегабайт — такие запросы стабильно обрываются ошибкой
-// "Failed to fetch" при загрузке на Railway (см. диагностику в чате).
-// Решение — понизить частоту дискретизации до 16 кГц и свести в моно
-// прямо в браузере перед отправкой. Модели голосового клонирования
-// (XTTS и подобные) всё равно пересэмплируют вход к своей рабочей
-// частоте внутри себя, так что для результата генерации это не потеря
-// качества, а просто удаление избыточных данных.
+// несколько мегабайт — такие запросы стабильно обрывались ошибкой
+// "Failed to fetch" при загрузке на Railway. Решение — понизить частоту
+// дискретизации до 16 кГц и свести в моно прямо в браузере перед
+// отправкой. Модели голосового клонирования (XTTS и подобные) всё равно
+// пересэмплируют вход к своей рабочей частоте внутри себя, так что для
+// результата генерации это не потеря качества, а просто удаление
+// избыточных данных.
 const COMPRESSED_SAMPLE_RATE = 16000
 
 function encodeWavPCM16(audioBuffer) {
@@ -328,8 +383,9 @@ export async function compressAudioFile(file) {
 // Полноценное сжатие видео в браузере (без WebCodecs) требует реального
 // проигрывания файла от начала до конца, поэтому для длинных исходников
 // может занимать минуты и зависать в фоновых вкладках. Пока оставлено
-// как no-op — компрессия видео отключена, полагаемся на честную
-// рекомендацию по размеру в подсказке под полем загрузки.
+// как no-op — компрессия видео отключена, теперь для крупных видео вместо
+// сжатия используется прямая загрузка в Supabase Storage (см. выше),
+// которая решает проблему "Failed to fetch" без потери качества.
 export async function compressVideoFile(file) {
   return file
 }
