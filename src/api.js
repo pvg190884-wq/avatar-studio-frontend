@@ -1,3 +1,5 @@
+import { supabaseUrl, supabaseAnonKey } from './supabaseClient'
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://avatar-studio-backend-production.up.railway.app'
 
 async function parseJsonOrThrow(res) {
@@ -12,6 +14,44 @@ async function parseJsonOrThrow(res) {
     throw new Error(detail)
   }
   return data
+}
+
+// ---------- Устойчивый fetch с таймаутом и повторами ----------
+//
+// Обнаруженная причина "Failed to fetch" на опросе статуса и на
+// платёжных запросах (см. историю чата): бэкенд на Railway всё это
+// время исправно отвечал 200 OK (подтверждено логами) — обрыв
+// происходил МЕЖДУ браузером и Railway, часто на мобильной сети или
+// корпоративной сети, которая тихо рвёт TCP-соединение без явного
+// сигнала закрытия. Обычный fetch() без таймаута в этом случае может
+// "висеть" несколько минут, прежде чем браузер сам сдастся — и одна
+// такая "тихая смерть" одного запроса из многих обрывала всю
+// генерацию, хотя сервер продолжал и завершал работу в фоне.
+//
+// fetchWithRetry принудительно обрывает зависший запрос по таймауту
+// и повторяет попытку — применяется только к операциям БЕЗ побочных
+// эффектов (чтение статуса/баланса), где повтор всегда безопасен.
+async function fetchWithRetry(url, options = {}, { timeoutMs = 20000, retries = 4, retryDelayMs = 1500 } = {}) {
+  let lastError = null
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+
+    try {
+      const res = await fetch(url, { ...options, signal: controller.signal })
+      clearTimeout(timeoutId)
+      return res
+    } catch (err) {
+      clearTimeout(timeoutId)
+      lastError = err
+      if (attempt < retries) {
+        await new Promise((resolve) => setTimeout(resolve, retryDelayMs))
+      }
+    }
+  }
+
+  throw lastError
 }
 
 // Грубая оценка длительности озвучки текста (TTS) в секундах —
@@ -48,7 +88,23 @@ export function formatUsd(amount) {
 
 // ---------- Генерация (Кейсы 1, 2, 3) ----------
 // ВАЖНО: генерация теперь требует авторизации (списывает баланс на
-// бэкенде) — accessToken обязателен для всех функций ниже.
+// бэкенде) — accessToken обязателен для всех функций ниже. Эти
+// запросы НЕ используют fetchWithRetry намеренно — они имеют побочный
+// эффект (списание баланса, отправка задачи в RunPod), и слепой
+// автоматический повтор при "неясно, дошёл запрос или нет" рискует
+// задвоить списание/задачу. Явный таймаут добавлен, чтобы хотя бы не
+// висеть по несколько минут вместо быстрого и понятного отказа —
+// кнопка "Попробовать снова" в UI остаётся безопасным путём вручную.
+
+async function fetchWithTimeoutOnly(url, options, timeoutMs = 60000) {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fetch(url, { ...options, signal: controller.signal })
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
 
 export async function submitPhotoTextEmotion({ image, voiceSample, text, emotion, language, accessToken }) {
   const form = new FormData()
@@ -58,7 +114,7 @@ export async function submitPhotoTextEmotion({ image, voiceSample, text, emotion
   form.append('emotion', emotion)
   form.append('language', language)
 
-  const res = await fetch(`${API_BASE}/api/generate/photo-text-emotion`, {
+  const res = await fetchWithTimeoutOnly(`${API_BASE}/api/generate/photo-text-emotion`, {
     method: 'POST',
     headers: { authorization: `Bearer ${accessToken}` },
     body: form,
@@ -73,7 +129,7 @@ export async function submitPhotoEmotion({ image, audio, expressionScale, poseSt
   form.append('expression_scale', expressionScale)
   form.append('pose_style', poseStyle)
 
-  const res = await fetch(`${API_BASE}/api/generate/photo-emotion`, {
+  const res = await fetchWithTimeoutOnly(`${API_BASE}/api/generate/photo-emotion`, {
     method: 'POST',
     headers: { authorization: `Bearer ${accessToken}` },
     body: form,
@@ -86,7 +142,7 @@ export async function submitLipsync({ video, audio, accessToken }) {
   form.append('video', video)
   form.append('audio', audio)
 
-  const res = await fetch(`${API_BASE}/api/generate/lipsync`, {
+  const res = await fetchWithTimeoutOnly(`${API_BASE}/api/generate/lipsync`, {
     method: 'POST',
     headers: { authorization: `Bearer ${accessToken}` },
     body: form,
@@ -101,18 +157,30 @@ export async function submitLipsyncFromText({ video, voiceSample, text, language
   form.append('text', text)
   form.append('language', language)
 
-  const res = await fetch(`${API_BASE}/api/generate/lipsync-from-text`, {
-    method: 'POST',
-    headers: { authorization: `Bearer ${accessToken}` },
-    body: form,
-  })
+  // Дольше остальных: внутри этого запроса бэкенд синхронно ждёт TTS
+  // (до 120с по своему собственному таймауту) до того, как вообще
+  // отправит задачу липсинка — общий таймаут здесь должен быть
+  // заведомо больше этого внутреннего ожидания.
+  const res = await fetchWithTimeoutOnly(
+    `${API_BASE}/api/generate/lipsync-from-text`,
+    {
+      method: 'POST',
+      headers: { authorization: `Bearer ${accessToken}` },
+      body: form,
+    },
+    150000
+  )
   return parseJsonOrThrow(res)
 }
 
 // Опрос статуса. Бэкенд при готовности отдаёт бинарный video/mp4,
 // а не JSON — поэтому смотрим на content-type перед парсингом.
+// Единственный по-настоящему безопасный для повтора запрос из всех —
+// чтение статуса не имеет побочных эффектов, поэтому это и есть
+// главное место применения fetchWithRetry (см. её комментарий выше —
+// это конкретно тот случай, который ловили в логах).
 export async function pollJobStatus(jobId) {
-  const res = await fetch(`${API_BASE}/api/generate/status/${jobId}`)
+  const res = await fetchWithRetry(`${API_BASE}/api/generate/status/${jobId}`)
   const contentType = res.headers.get('content-type') || ''
 
   if (contentType.includes('video')) {
@@ -127,19 +195,19 @@ export async function pollJobStatus(jobId) {
 // ---------- Биллинг ----------
 
 export async function getBalance(accessToken) {
-  const res = await fetch(`${API_BASE}/api/billing/balance`, {
+  const res = await fetchWithRetry(`${API_BASE}/api/billing/balance`, {
     headers: { authorization: `Bearer ${accessToken}` },
   })
   return parseJsonOrThrow(res) // { user_id, balance_usd }
 }
 
 export async function estimateCost(durationSeconds) {
-  const res = await fetch(`${API_BASE}/api/billing/estimate?duration_seconds=${encodeURIComponent(durationSeconds)}`)
+  const res = await fetchWithRetry(`${API_BASE}/api/billing/estimate?duration_seconds=${encodeURIComponent(durationSeconds)}`)
   return parseJsonOrThrow(res) // { duration_seconds, estimated_cost_usd }
 }
 
 export async function createDeposit(accessToken, amount, method) {
-  const res = await fetch(`${API_BASE}/api/billing/create-deposit`, {
+  const res = await fetchWithRetry(`${API_BASE}/api/billing/create-deposit`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -151,7 +219,7 @@ export async function createDeposit(accessToken, amount, method) {
 }
 
 export async function checkDeposit(invoiceId) {
-  const res = await fetch(`${API_BASE}/api/billing/check-deposit`, {
+  const res = await fetchWithRetry(`${API_BASE}/api/billing/check-deposit`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ invoice_id: invoiceId }),
@@ -160,7 +228,7 @@ export async function checkDeposit(invoiceId) {
 }
 
 export async function sbpRequest(accessToken, amountRub) {
-  const res = await fetch(`${API_BASE}/api/billing/sbp/request`, {
+  const res = await fetchWithRetry(`${API_BASE}/api/billing/sbp/request`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -330,16 +398,6 @@ export async function compressAudioFile(file) {
 // может занимать минуты и зависать в фоновых вкладках. Пока оставлено
 // как no-op — компрессия видео отключена, полагаемся на честную
 // рекомендацию по размеру в подсказке под полем загрузки.
-//
-// ВАЖНО: ранее вместо этого файла видео пробовали грузить напрямую в
-// Supabase Storage, в обход Railway (расчёт был на решение
-// "Failed to fetch" при загрузке крупных видео). На практике это дало
-// обратный эффект: добавило лишний сетевой прыжок (браузер -> Storage,
-// потом Railway -> Storage), заметно увеличило время до отправки
-// задачи на GPU и стало давать "Failed to fetch" уже на самой загрузке
-// в Storage — чего не было при прямой загрузке через Railway. Откат
-// обратно на прямую загрузку через Railway (см. submitLipsync /
-// submitLipsyncFromText выше).
 export async function compressVideoFile(file) {
   return file
 }
