@@ -1,5 +1,3 @@
-import { supabaseUrl, supabaseAnonKey } from './supabaseClient'
-
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://avatar-studio-backend-production.up.railway.app'
 
 async function parseJsonOrThrow(res) {
@@ -401,4 +399,3 @@ export async function compressAudioFile(file) {
 export async function compressVideoFile(file) {
   return file
 }
-
