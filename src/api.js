@@ -401,3 +401,4 @@ export async function compressAudioFile(file) {
 export async function compressVideoFile(file) {
   return file
 }
+
