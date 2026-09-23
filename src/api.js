@@ -155,19 +155,15 @@ export async function submitLipsyncFromText({ video, voiceSample, text, language
   form.append('text', text)
   form.append('language', language)
 
-  // Дольше остальных: внутри этого запроса бэкенд синхронно ждёт TTS
-  // (до 120с по своему собственному таймауту) до того, как вообще
-  // отправит задачу липсинка — общий таймаут здесь должен быть
-  // заведомо больше этого внутреннего ожидания.
-  const res = await fetchWithTimeoutOnly(
-    `${API_BASE}/api/generate/lipsync-from-text`,
-    {
-      method: 'POST',
-      headers: { authorization: `Bearer ${accessToken}` },
-      body: form,
-    },
-    150000
-  )
+  // Раньше здесь был увеличенный таймаут (150с), компенсирующий
+  // синхронное ожидание TTS на бэкенде — теперь backend отвечает
+  // почти мгновенно (TTS ушёл в фон), так что дефолтный таймаут,
+  // как у остальных генераций, подходит и сюда.
+  const res = await fetchWithTimeoutOnly(`${API_BASE}/api/generate/lipsync-from-text`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${accessToken}` },
+    body: form,
+  })
   return parseJsonOrThrow(res)
 }
 
