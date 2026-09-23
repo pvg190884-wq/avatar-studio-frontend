@@ -225,8 +225,15 @@ export async function checkDeposit(invoiceId) {
   return parseJsonOrThrow(res)
 }
 
+// ВАЖНО: в отличие от getBalance/estimateCost/createDeposit/checkDeposit
+// выше, у этого запроса есть побочный эффект — он создаёт запись о
+// заявке в БД и отправляет уведомление в Telegram. Раньше был по
+// ошибке обёрнут в fetchWithRetry (безопасный для повтора список) —
+// из-за этого каждая неудачная попытка создавала ДУБЛИРУЮЩУЮСЯ заявку
+// (см. историю чата: 5 попыток в Network -> 5 заявок вместо одной).
+// Только таймаут, без авто-повтора — как и у остальных генераций.
 export async function sbpRequest(accessToken, amountRub) {
-  const res = await fetchWithRetry(`${API_BASE}/api/billing/sbp/request`, {
+  const res = await fetchWithTimeoutOnly(`${API_BASE}/api/billing/sbp/request`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
