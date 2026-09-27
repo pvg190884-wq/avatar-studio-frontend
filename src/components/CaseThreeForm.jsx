@@ -22,6 +22,11 @@ export default function CaseThreeForm({ onBack, balance, session, onGenerated })
   const [language, setLanguage] = useState('ru')
 
   const [submitting, setSubmitting] = useState(false)
+  // Прогресс именно ЗАГРУЗКИ файла на сервер (0..1), не прогресс всей
+  // генерации — та отслеживается отдельно в JobRunner после получения
+  // job_id. Это важно на медленном канале: видео до ~15 МБ может
+  // грузиться дольше минуты, и без индикатора выглядит как зависание.
+  const [uploadProgress, setUploadProgress] = useState(null)
   const [error, setError] = useState(null)
   const [jobId, setJobId] = useState(null)
 
@@ -66,16 +71,24 @@ export default function CaseThreeForm({ onBack, balance, session, onGenerated })
     e.preventDefault()
     if (!canSubmit) return
     setSubmitting(true)
+    setUploadProgress(0)
     setError(null)
     try {
       const data = mode === 'audio'
-        ? await submitLipsync({ video, audio, accessToken: session.access_token })
-        : await submitLipsyncFromText({ video, voiceSample, text, language, accessToken: session.access_token })
+        ? await submitLipsync({
+            video, audio, accessToken: session.access_token,
+            onUploadProgress: setUploadProgress,
+          })
+        : await submitLipsyncFromText({
+            video, voiceSample, text, language, accessToken: session.access_token,
+            onUploadProgress: setUploadProgress,
+          })
       setJobId(data.job_id)
     } catch (err) {
       setError(err.message || 'Не удалось отправить задачу')
     } finally {
       setSubmitting(false)
+      setUploadProgress(null)
     }
   }
 
@@ -182,8 +195,34 @@ export default function CaseThreeForm({ onBack, balance, session, onGenerated })
           </>
         )}
 
+        {submitting && uploadProgress !== null && (
+          <div className="field" style={{ marginBottom: 12 }}>
+            <div
+              style={{
+                height: 6, borderRadius: 3, background: 'rgba(255,255,255,0.1)', overflow: 'hidden',
+              }}
+            >
+              <div
+                style={{
+                  height: '100%', width: `${Math.round(uploadProgress * 100)}%`,
+                  background: 'currentColor', transition: 'width 0.15s ease',
+                }}
+              />
+            </div>
+            <span className="hint" style={{ textTransform: 'none' }}>
+              {uploadProgress < 1
+                ? `Загружаем файлы на сервер… ${Math.round(uploadProgress * 100)}%`
+                : 'Файлы загружены, обрабатываем…'}
+            </span>
+          </div>
+        )}
+
         <button className="btn btn-primary btn-block" type="submit" disabled={!canSubmit}>
-          {submitting ? (mode === 'text' ? 'Озвучиваем и отправляем…' : 'Отправляем…') : 'Сгенерировать видео'}
+          {submitting
+            ? (uploadProgress !== null && uploadProgress < 1
+                ? `Загрузка… ${Math.round(uploadProgress * 100)}%`
+                : (mode === 'text' ? 'Озвучиваем и отправляем…' : 'Отправляем…'))
+            : 'Сгенерировать видео'}
         </button>
       </form>
     </div>
