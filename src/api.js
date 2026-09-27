@@ -104,6 +104,58 @@ async function fetchWithTimeoutOnly(url, options, timeoutMs = 60000) {
   }
 }
 
+// ---------- Загрузка с прогрессом (для запросов с видео) ----------
+//
+// Найденная причина "signal is aborted without reason" на Кейсе 3:
+// submitLipsync/submitLipsyncFromText отправляют видео (до ~15 МБ)
+// внутри тела запроса, и на медленном канале сама загрузка на сервер
+// (ещё ДО того, как бэкенд вообще начнёт отвечать) может занять
+// больше 60 секунд — обычного таймаута остальных генераций. fetch()
+// не даёт возможности показать прогресс именно загрузки (upload),
+// поэтому для этих двух функций используется XMLHttpRequest вместо
+// fetch — это даёт: (1) больший таймаут, оправданный размером файла,
+// и (2) реальный прогресс-бар загрузки для пользователя на медленной
+// сети, вместо немого ожидания.
+function uploadFormWithProgress(url, form, headers, { timeoutMs = 180000, onProgress } = {}) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', url)
+    xhr.timeout = timeoutMs
+
+    Object.entries(headers || {}).forEach(([key, value]) => {
+      xhr.setRequestHeader(key, value)
+    })
+
+    if (onProgress) {
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) onProgress(e.loaded / e.total)
+      }
+    }
+
+    xhr.onload = () => {
+      let data = null
+      try {
+        data = JSON.parse(xhr.responseText)
+      } catch (e) {
+        // тело не JSON — оставляем data = null (как и в parseJsonOrThrow)
+      }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(data)
+      } else {
+        const detail = data && data.detail ? JSON.stringify(data.detail) : `Ошибка ${xhr.status}`
+        reject(new Error(detail))
+      }
+    }
+
+    // xhr.onerror срабатывает при обрыве сети (аналог "Failed to fetch"),
+    // xhr.ontimeout — при превышении timeoutMs (аналог AbortController.abort())
+    xhr.onerror = () => reject(new Error('Сетевая ошибка при отправке запроса'))
+    xhr.ontimeout = () => reject(new Error('Превышено время ожидания запроса — проверь соединение и попробуй снова'))
+
+    xhr.send(form)
+  })
+}
+
 export async function submitPhotoTextEmotion({ image, voiceSample, text, emotion, language, accessToken }) {
   const form = new FormData()
   form.append('image', image)
@@ -135,36 +187,45 @@ export async function submitPhotoEmotion({ image, audio, expressionScale, poseSt
   return parseJsonOrThrow(res)
 }
 
-export async function submitLipsync({ video, audio, accessToken }) {
+// Таймаут увеличен относительно остальных генераций и загрузка теперь
+// идёт через XMLHttpRequest с прогрессом: сюда всегда загружается
+// видеофайл (до ~15 МБ), и на медленном канале сама доставка файла на
+// сервер может занять больше 60 сек ещё до того, как бэкенд вообще
+// начнёт обработку и ответит (см. комментарий у uploadFormWithProgress).
+export async function submitLipsync({ video, audio, accessToken, onUploadProgress }) {
   const form = new FormData()
   form.append('video', video)
   form.append('audio', audio)
 
-  const res = await fetchWithTimeoutOnly(`${API_BASE}/api/generate/lipsync`, {
-    method: 'POST',
-    headers: { authorization: `Bearer ${accessToken}` },
-    body: form,
-  })
-  return parseJsonOrThrow(res)
+  return uploadFormWithProgress(
+    `${API_BASE}/api/generate/lipsync`,
+    form,
+    { authorization: `Bearer ${accessToken}` },
+    { timeoutMs: 180000, onProgress: onUploadProgress }
+  )
 }
 
-export async function submitLipsyncFromText({ video, voiceSample, text, language, accessToken }) {
+export async function submitLipsyncFromText({ video, voiceSample, text, language, accessToken, onUploadProgress }) {
   const form = new FormData()
   form.append('video', video)
   form.append('voice_sample', voiceSample)
   form.append('text', text)
   form.append('language', language)
 
-  // Раньше здесь был увеличенный таймаут (150с), компенсирующий
-  // синхронное ожидание TTS на бэкенде — теперь backend отвечает
-  // почти мгновенно (TTS ушёл в фон), так что дефолтный таймаут,
-  // как у остальных генераций, подходит и сюда.
-  const res = await fetchWithTimeoutOnly(`${API_BASE}/api/generate/lipsync-from-text`, {
-    method: 'POST',
-    headers: { authorization: `Bearer ${accessToken}` },
-    body: form,
-  })
-  return parseJsonOrThrow(res)
+  // Тот же аргумент, что и у submitLipsync выше: TTS ушёл в фон на
+  // бэкенде (см. backend/routers/runpod_avatar.py), но сам HTTP-запрос
+  // всё равно должен сначала полностью доставить видео на сервер —
+  // таймаут и прогресс должны покрывать время аплоада, а не только
+  // время обработки после него. Раньше здесь ошибочно предполагалось,
+  // что раз обработка стала мгновенной, то и дефолтный 60-секундный
+  // таймаут остальных генераций подходит и сюда — на деле упирались в
+  // него именно на этапе загрузки самого видеофайла, а не на TTS.
+  return uploadFormWithProgress(
+    `${API_BASE}/api/generate/lipsync-from-text`,
+    form,
+    { authorization: `Bearer ${accessToken}` },
+    { timeoutMs: 180000, onProgress: onUploadProgress }
+  )
 }
 
 // Опрос статуса. Бэкенд при готовности отдаёт бинарный video/mp4,
