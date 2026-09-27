@@ -116,7 +116,7 @@ async function fetchWithTimeoutOnly(url, options, timeoutMs = 60000) {
 // fetch — это даёт: (1) больший таймаут, оправданный размером файла,
 // и (2) реальный прогресс-бар загрузки для пользователя на медленной
 // сети, вместо немого ожидания.
-function uploadFormWithProgress(url, form, headers, { timeoutMs = 180000, onProgress } = {}) {
+function uploadFormWithProgress(url, form, headers, { timeoutMs = 600000, onProgress } = {}) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
     xhr.open('POST', url)
@@ -201,7 +201,7 @@ export async function submitLipsync({ video, audio, accessToken, onUploadProgres
     `${API_BASE}/api/generate/lipsync`,
     form,
     { authorization: `Bearer ${accessToken}` },
-    { timeoutMs: 180000, onProgress: onUploadProgress }
+    { timeoutMs: 600000, onProgress: onUploadProgress }
   )
 }
 
@@ -224,7 +224,7 @@ export async function submitLipsyncFromText({ video, voiceSample, text, language
     `${API_BASE}/api/generate/lipsync-from-text`,
     form,
     { authorization: `Bearer ${accessToken}` },
-    { timeoutMs: 180000, onProgress: onUploadProgress }
+    { timeoutMs: 600000, onProgress: onUploadProgress }
   )
 }
 
