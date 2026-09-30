@@ -3,13 +3,15 @@ import FileDrop from './FileDrop'
 import JobRunner from './JobRunner'
 import { submitPhotoEmotion, estimateCost, readAudioDuration, MAX_CLIP_SECONDS, formatUsd } from '../api'
 
-// Пресеты Basic/Pro — API кейса 2 сам не различает тарифы, поэтому
-// тариф здесь маппится на доступные параметры модели (expression_scale,
-// pose_style). Если в будущем появятся отдельные параметры качества —
-// расширить пресеты здесь.
+// Basic — SadTalker (expression_scale/pose_style ниже). Pro — EchoMimicV2:
+// жестикуляция + более естественная мимика, эмоцию для выбора
+// pose-последовательности EchoMimic определяет сам по тону аудио (см.
+// backend/routers/runpod_avatar.py submit_echomimic_job, emotion=None).
+// expressionScale/poseStyle в Pro-режиме бэкендом игнорируются — это
+// параметры именно SadTalker, но оставлены в пресете для Basic.
 const TIERS = {
   basic: { label: 'Basic', desc: 'Стандартная мимика', expressionScale: 0.7, poseStyle: 0 },
-  pro: { label: 'Pro', desc: 'Более выразительная анимация', expressionScale: 1.0, poseStyle: 15 },
+  pro: { label: 'Pro', desc: 'Жестикуляция + более естественная мимика', expressionScale: 1.0, poseStyle: 15 },
 }
 
 export default function CaseTwoForm({ onBack, balance, session, onGenerated }) {
@@ -66,6 +68,7 @@ export default function CaseTwoForm({ onBack, balance, session, onGenerated }) {
         audio,
         expressionScale: preset.expressionScale,
         poseStyle: preset.poseStyle,
+        tier,
         accessToken: session.access_token,
       })
       setJobId(data.job_id)
