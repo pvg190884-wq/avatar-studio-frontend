@@ -11,12 +11,22 @@ const EMOTIONS = [
   { id: 'surprised', label: 'Удивление' },
 ]
 
+// Basic — SadTalker/XTTS (текущий пайплайн). Pro — EchoMimicV2: более
+// естественная мимика и жестикуляция рук, подобранная под выбранную
+// эмоцию из её готовой библиотеки pose-последовательностей. Тот же
+// паттерн тумблера, что уже есть в CaseTwoForm.jsx.
+const TIERS = {
+  basic: { label: 'Basic', desc: 'Стандартная мимика' },
+  pro: { label: 'Pro', desc: 'Жестикуляция + более естественная мимика' },
+}
+
 export default function CaseOneForm({ onBack, session, onGenerated }) {
   const [image, setImage] = useState(null)
   const [voiceSample, setVoiceSample] = useState(null)
   const [text, setText] = useState('')
   const [emotion, setEmotion] = useState('neutral')
   const [language, setLanguage] = useState('ru')
+  const [tier, setTier] = useState('basic')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState(null)
   const [jobId, setJobId] = useState(null)
@@ -33,7 +43,7 @@ export default function CaseOneForm({ onBack, session, onGenerated }) {
     setSubmitting(true)
     setError(null)
     try {
-      const data = await submitPhotoTextEmotion({ image, voiceSample, text, emotion, language, accessToken: session.access_token })
+      const data = await submitPhotoTextEmotion({ image, voiceSample, text, emotion, language, tier, accessToken: session.access_token })
       setJobId(data.job_id)
     } catch (err) {
       setError(err.message || 'Не удалось отправить задачу')
@@ -116,8 +126,26 @@ export default function CaseOneForm({ onBack, session, onGenerated }) {
           </select>
         </div>
 
+        <div className="field">
+          <label>Тариф</label>
+          <div className="tier-toggle">
+            {Object.entries(TIERS).map(([key, t]) => (
+              <div
+                key={key}
+                className={`tier-option ${tier === key ? 'active' : ''}`}
+                onClick={() => setTier(key)}
+              >
+                <b>{t.label}</b>
+                <span>{t.desc}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
         <button className="btn btn-primary btn-block" type="submit" disabled={!canSubmitFinal}>
-          {submitting ? 'Отправляем…' : 'Сгенерировать видео'}
+          {submitting
+            ? (tier === 'pro' ? 'Озвучиваем и анимируем…' : 'Отправляем…')
+            : 'Сгенерировать видео'}
         </button>
       </form>
     </div>
