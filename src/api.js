@@ -156,13 +156,14 @@ function uploadFormWithProgress(url, form, headers, { timeoutMs = 600000, onProg
   })
 }
 
-export async function submitPhotoTextEmotion({ image, voiceSample, text, emotion, language, accessToken }) {
+export async function submitPhotoTextEmotion({ image, voiceSample, text, emotion, language, tier, accessToken }) {
   const form = new FormData()
   form.append('image', image)
   form.append('voice_sample', voiceSample)
   form.append('text', text)
   form.append('emotion', emotion)
   form.append('language', language)
+  form.append('tier', tier || 'basic')
 
   const res = await fetchWithTimeoutOnly(`${API_BASE}/api/generate/photo-text-emotion`, {
     method: 'POST',
@@ -172,12 +173,13 @@ export async function submitPhotoTextEmotion({ image, voiceSample, text, emotion
   return parseJsonOrThrow(res)
 }
 
-export async function submitPhotoEmotion({ image, audio, expressionScale, poseStyle, accessToken }) {
+export async function submitPhotoEmotion({ image, audio, expressionScale, poseStyle, tier, accessToken }) {
   const form = new FormData()
   form.append('image', image)
   form.append('audio', audio)
   form.append('expression_scale', expressionScale)
   form.append('pose_style', poseStyle)
+  form.append('tier', tier || 'basic')
 
   const res = await fetchWithTimeoutOnly(`${API_BASE}/api/generate/photo-emotion`, {
     method: 'POST',
