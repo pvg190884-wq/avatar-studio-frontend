@@ -1,23 +1,36 @@
 import { useEffect, useState } from 'react'
 import FileDrop from './FileDrop'
 import JobRunner from './JobRunner'
-import { submitPhotoEmotion, estimateCost, readAudioDuration, MAX_CLIP_SECONDS, formatUsd } from '../api'
+import { submitPhotoEmotion, estimateCost, readAudioDuration, MAX_CLIP_SECONDS, formatUsd, PRO_PRICE_PER_SECOND_USD, PRO_NOTE } from '../api'
 
-// Basic — SadTalker (expression_scale/pose_style ниже). Pro — EchoMimicV2:
-// жестикуляция + более естественная мимика, эмоцию для выбора
-// pose-последовательности EchoMimic определяет сам по тону аудио (см.
-// backend/routers/runpod_avatar.py submit_echomimic_job, emotion=None).
+// Basic — SadTalker (expression_scale/pose_style ниже). Pro — LongCat-Video-
+// Avatar: премиум-качество, эмоцию пользователь выбирает на форме (список
+// ниже — ключи совпадают с библиотекой эмоций в handler.py воркера).
 // expressionScale/poseStyle в Pro-режиме бэкендом игнорируются — это
 // параметры именно SadTalker, но оставлены в пресете для Basic.
 const TIERS = {
   basic: { label: 'Basic', desc: 'Стандартная мимика', expressionScale: 0.7, poseStyle: 0 },
-  pro: { label: 'Pro', desc: 'Жестикуляция + более естественная мимика', expressionScale: 1.0, poseStyle: 15 },
+  pro: {
+    label: 'Pro',
+    desc: 'Жестикуляция + более естественная мимика',
+    note: `${PRO_NOTE} · $${PRO_PRICE_PER_SECOND_USD.toFixed(2)} за секунду`,
+    expressionScale: 1.0,
+    poseStyle: 15,
+  },
 }
+
+const PRO_EMOTIONS = [
+  { id: 'neutral', label: 'Нейтрально' },
+  { id: 'angry', label: 'Злость' },
+  { id: 'happy', label: 'Счастье' },
+  { id: 'sad', label: 'Грусть' },
+]
 
 export default function CaseTwoForm({ onBack, balance, session, onGenerated }) {
   const [image, setImage] = useState(null)
   const [audio, setAudio] = useState(null)
   const [tier, setTier] = useState('basic')
+  const [emotion, setEmotion] = useState('neutral')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState(null)
   const [jobId, setJobId] = useState(null)
@@ -37,7 +50,7 @@ export default function CaseTwoForm({ onBack, balance, session, onGenerated }) {
       .then((duration) => {
         if (cancelled) return
         setAudioSeconds(duration)
-        return estimateCost(duration)
+        return estimateCost(duration, tier)
       })
       .then((data) => {
         if (!cancelled && data) setCost(data?.estimated_cost_usd ?? null)
@@ -49,7 +62,7 @@ export default function CaseTwoForm({ onBack, balance, session, onGenerated }) {
         if (!cancelled) setCostLoading(false)
       })
     return () => { cancelled = true }
-  }, [audio])
+  }, [audio, tier])
 
   const overLimit = audioSeconds !== null && audioSeconds > MAX_CLIP_SECONDS
   const canSubmit = image && audio && !submitting && !overLimit
@@ -69,6 +82,7 @@ export default function CaseTwoForm({ onBack, balance, session, onGenerated }) {
         expressionScale: preset.expressionScale,
         poseStyle: preset.poseStyle,
         tier,
+        emotion: tier === 'pro' ? emotion : 'neutral',
         accessToken: session.access_token,
       })
       setJobId(data.job_id)
@@ -110,7 +124,7 @@ export default function CaseTwoForm({ onBack, balance, session, onGenerated }) {
           file={audio}
           onChange={setAudio}
           label="Аудио"
-          hint={`WAV/MP3, до ${MAX_CLIP_SECONDS} секунд — модель сама подстроит эмоции`}
+          hint={`WAV/MP3, до ${MAX_CLIP_SECONDS} секунд${tier === 'pro' ? '' : ' — модель сама подстроит эмоции'}`}
           compressAudio
         />
 
@@ -125,10 +139,28 @@ export default function CaseTwoForm({ onBack, balance, session, onGenerated }) {
               >
                 <b>{t.label}</b>
                 <span>{t.desc}</span>
+                {t.note && <span className="tier-note">{t.note}</span>}
               </div>
             ))}
           </div>
         </div>
+
+        {tier === 'pro' && (
+          <div className="field">
+            <label>Эмоция</label>
+            <div className="emotion-grid">
+              {PRO_EMOTIONS.map((em) => (
+                <div
+                  key={em.id}
+                  className={`emotion-chip ${emotion === em.id ? 'active' : ''}`}
+                  onClick={() => setEmotion(em.id)}
+                >
+                  {em.label}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {audioSeconds !== null && (
           <div className={`cost-banner ${insufficient || overLimit ? 'insufficient' : ''}`}>
