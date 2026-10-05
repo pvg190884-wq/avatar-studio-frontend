@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import FileDrop from './FileDrop'
 import JobRunner from './JobRunner'
-import { submitPhotoTextEmotion, estimateTextDurationSeconds, MAX_CLIP_SECONDS } from '../api'
+import { submitPhotoTextEmotion, estimateTextDurationSeconds, MAX_CLIP_SECONDS, formatUsd, PRO_PRICE_PER_SECOND_USD, PRO_NOTE } from '../api'
 
 const EMOTIONS = [
   { id: 'neutral', label: 'Нейтрально' },
@@ -17,7 +17,11 @@ const EMOTIONS = [
 // паттерн тумблера, что уже есть в CaseTwoForm.jsx.
 const TIERS = {
   basic: { label: 'Basic', desc: 'Стандартная мимика' },
-  pro: { label: 'Pro', desc: 'Жестикуляция + более естественная мимика' },
+  pro: {
+    label: 'Pro',
+    desc: 'Жестикуляция + более естественная мимика',
+    note: `${PRO_NOTE} · $${PRO_PRICE_PER_SECOND_USD.toFixed(2)} за секунду`,
+  },
 }
 
 export default function CaseOneForm({ onBack, session, onGenerated }) {
@@ -137,9 +141,15 @@ export default function CaseOneForm({ onBack, session, onGenerated }) {
               >
                 <b>{t.label}</b>
                 <span>{t.desc}</span>
+                {t.note && <span className="tier-note">{t.note}</span>}
               </div>
             ))}
           </div>
+          {tier === 'pro' && text.trim().length > 0 && (
+            <span className="hint" style={{ textTransform: 'none' }}>
+              Примерная стоимость Pro: ~{formatUsd(estimatedSeconds * PRO_PRICE_PER_SECOND_USD)} (точно — по длительности готового видео)
+            </span>
+          )}
         </div>
 
         <button className="btn btn-primary btn-block" type="submit" disabled={!canSubmitFinal}>
