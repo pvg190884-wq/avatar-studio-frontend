@@ -77,6 +77,12 @@ export const MAX_CLIP_SECONDS = 15
 // (доли цента — реальная стоимость GPU-времени для короткого клипа)
 // не округлялись до "$0.00", что выглядит как явная ошибка рядом с
 // предупреждением "недостаточно средств".
+// Цена Pro для клиента, $ за секунду аудио. Используется ТОЛЬКО для текста-
+// подсказки в интерфейсе; реальное списание считает бэкенд — держи это число
+// равным PRO_PRICE_PER_SECOND_USD в backend/routers/billing.py.
+export const PRO_PRICE_PER_SECOND_USD = 0.25
+export const PRO_NOTE = 'Премиум качество. Дорого'
+
 export function formatUsd(amount) {
   if (amount === null || amount === undefined) return null
   if (amount === 0) return '$0.00'
@@ -173,13 +179,14 @@ export async function submitPhotoTextEmotion({ image, voiceSample, text, emotion
   return parseJsonOrThrow(res)
 }
 
-export async function submitPhotoEmotion({ image, audio, expressionScale, poseStyle, tier, accessToken }) {
+export async function submitPhotoEmotion({ image, audio, expressionScale, poseStyle, tier, emotion, accessToken }) {
   const form = new FormData()
   form.append('image', image)
   form.append('audio', audio)
   form.append('expression_scale', expressionScale)
   form.append('pose_style', poseStyle)
   form.append('tier', tier || 'basic')
+  form.append('emotion', emotion || 'neutral')
 
   const res = await fetchWithTimeoutOnly(`${API_BASE}/api/generate/photo-emotion`, {
     method: 'POST',
@@ -258,8 +265,8 @@ export async function getBalance(accessToken) {
   return parseJsonOrThrow(res) // { user_id, balance_usd }
 }
 
-export async function estimateCost(durationSeconds) {
-  const res = await fetchWithRetry(`${API_BASE}/api/billing/estimate?duration_seconds=${encodeURIComponent(durationSeconds)}`)
+export async function estimateCost(durationSeconds, tier = 'basic') {
+  const res = await fetchWithRetry(`${API_BASE}/api/billing/estimate?duration_seconds=${encodeURIComponent(durationSeconds)}&tier=${encodeURIComponent(tier)}`)
   return parseJsonOrThrow(res) // { duration_seconds, estimated_cost_usd }
 }
 
