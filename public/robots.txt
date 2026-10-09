@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://avatar-studio.bestconsulting-usa.ru/sitemap.xml
